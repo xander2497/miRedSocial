@@ -1,0 +1,19 @@
+# No copiar entornos virtuales locales dentro de la imagen
+venv/
+env/
+
+# Cache de Python (se regenera solo)
+__pycache__/
+*.pyc
+
+# Git no hace falta dentro del contenedor
+.git/
+.github/
+
+# Base de datos local de desarrollo (en producción se usa otra, no la de tu máquina)
+db.sqlite3
+
+# Archivos del editor / sistema
+.vscode/
+.idea/
+.DS_Store

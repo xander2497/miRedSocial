@@ -36,8 +36,10 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
+      - name: Instalar Railway CLI
+        run: npm i -g @railway/cli
+
       - name: Desplegar a Railway
-        uses: bervProject/railway-deploy@main
-        with:
-          railway_token: ${{ secrets.RAILWAYTOKEN }}
-          service: miRedSocial
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAYTOKEN }}
+        run: railway up --service miRedSocial --ci

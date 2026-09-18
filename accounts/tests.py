@@ -144,12 +144,3 @@ class PasswordDebilTests(APITestCase):
         response = self.client.post(url, datos_de_registro)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-
-# TEST BASURA — solo para probar el gate "Wait for CI" de Railway. BORRAR después de probar.
-from rest_framework.test import APITestCase as _APITestCase
-
-
-class ZZZTestDummyFallaSiempreTests(_APITestCase):
-    def test_esto_falla_a_proposito(self):
-        self.assertEqual(1, 2, "Falla a propósito para probar el CI gate")

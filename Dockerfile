@@ -40,8 +40,12 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 8000
 
 # --- Comando de arranque ---
-# gunicorn es el servidor de producción (Django's runserver NO se usa en prod).
+# Corre las migraciones pendientes contra la base conectada (DATABASE_URL de
+# Railway en producción, o SQLite local) ANTES de levantar el servidor. Se
+# ejecuta en cada arranque del contenedor; es seguro porque Django solo
+# aplica las migraciones que aún no se aplicaron.
+# Luego gunicorn es el servidor de producción (Django's runserver NO se usa en prod).
 # miRedSocial.wsgi:application apunta a miRedSocial/wsgi.py -> variable "application".
 # ${PORT:-8000}: usa la variable PORT que inyecta Railway; si no existe (ej. local), usa 8000.
 # Debe ir en forma "shell" (sin corchetes) para que ${...} se expanda.
-CMD gunicorn miRedSocial.wsgi:application --bind 0.0.0.0:${PORT:-8000}
+CMD python manage.py migrate --noinput && gunicorn miRedSocial.wsgi:application --bind 0.0.0.0:${PORT:-8000}

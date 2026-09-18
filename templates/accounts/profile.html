@@ -1,0 +1,334 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Perfil</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+
+<body class="container mt-5">
+
+    <h2 class="text-center mb-4">Mi Perfil</h2>
+    <div id="profileApp"></div>
+    <hr class="my-4" />
+    <h3 class="mb-3">Mis publicaciones</h3>
+    <div id="myPostsApp"></div>
+
+    {% verbatim %}
+    <script type="text/babel">
+
+        function ProfileApp() {
+
+            const [user, setUser] = React.useState(null);
+
+            async function fetchUser() {
+                let access = localStorage.getItem("access");
+
+                let res = await fetch("/api/auth/me/", {
+                    headers: { "Authorization": "Bearer " + access }
+                });
+
+                // Si el access está expirado → intentar refresh
+                if (res.status === 401) {
+                    const refreshed = await refreshAccessToken();
+                    if (!refreshed) {
+                        // refresh falló → login
+                        window.location.href = "/login/";
+                        return;
+                    }
+
+                    // Intentar ME nuevamente
+                    access = localStorage.getItem("access");
+                    res = await fetch("/api/auth/me/", {
+                        headers: { "Authorization": "Bearer " + access }
+                    });
+                }
+
+                const data = await res.json();
+                setUser(data);
+            }
+
+
+            async function refreshAccessToken() {
+                const refresh = localStorage.getItem("refresh");
+
+                if (!refresh) return false;
+
+                const res = await fetch("/api/auth/refresh/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ refresh })
+                });
+
+                if (res.status !== 200) {
+                    return false;  // refresh inválido → login
+                }
+
+                const data = await res.json();
+                localStorage.setItem("access", data.access);
+                return true;
+            }
+
+
+            React.useEffect(() => {
+                fetchUser();
+            }, []);
+
+
+            function logout() {
+                localStorage.removeItem("access");
+                localStorage.removeItem("refresh");
+                window.location.href = "/login/";
+            }
+
+            if (!user) return <p>Cargando...</p>;
+
+
+            return (
+                <div className="card p-4 shadow-sm" style={{ maxWidth: "700px", margin: "auto" }}>
+
+                    {/* FOTO + NOMBRE + BIO */}
+                    <div className="text-center mb-4">
+
+                        {/* Avatar */}
+                        <img 
+                            src={user.profile.avatar || "/static/img/default-avatar.png"}
+                            alt="avatar"
+                            className="rounded-circle mb-3"
+                            style={{ width: "120px", height: "120px", objectFit: "cover" }}
+                        />
+
+                        {/* Nombre */}
+                        <h4>@{user.username}</h4>
+
+                        {/* Bio */}
+                        <p className="text-muted" style={{ whiteSpace: "pre-line" }}>
+                            {user.profile.bio || "Sin biografía aún..."}
+                        </p>
+                    </div>
+
+
+
+
+                    <div className="row g-2">
+
+                        <div className="col-3">
+                            <button 
+                                onClick={() => window.location.href = "/posts/feed/"}
+                                className="btn btn-primary w-100"
+                            >
+                                Feed
+                            </button>
+                        </div>
+
+                        <div className="col-3">
+                            <button 
+                                onClick={() => window.location.href = "/chat/"}
+                                className="btn btn-success w-100"
+                            >
+                                Chat
+                            </button>
+                        </div>
+
+                        <div className="col-3">
+                            <button 
+                                onClick={() => window.location.href = "/profile/edit/"}
+                                className="btn btn-secondary w-100"
+                            >
+                                Editar
+                            </button>
+                        </div>
+
+                        <div className="col-3">
+                            <button 
+                                onClick={logout}
+                                className="btn btn-danger w-100"
+                            >
+                                Salir
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            );
+            
+        }
+
+        function MyPostsApp() {
+
+            const [posts, setPosts] = React.useState([]);
+            const [content, setContent] = React.useState("");
+            const [image, setImage] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState("");
+
+            React.useEffect(() => {
+                loadPosts();
+            }, []);
+
+            function loadPosts() {
+                const token = localStorage.getItem("access");
+                if (!token) {
+                    window.location.href = "/login/";
+                    return;
+                }
+
+                setLoading(true);
+                setError("");
+
+                fetch("/api/posts/my/", {
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    }
+                })
+                .then(res => {
+                    if (res.status === 401) {
+                        // Token vencido o inválido → mandar a login
+                        window.location.href = "/login/";
+                        return;
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    if (data) {
+                        setPosts(data);
+                        setLoading(false);
+                    }
+                });
+            }
+
+            function handleImageChange(e) {
+                const file = e.target.files[0];
+                setImage(file || null);
+            }
+
+            function handleSubmit(e) {
+                e.preventDefault();
+                setError("");
+
+                if (!content.trim() && !image) {
+                    setError("Escribe algo o sube una imagen para publicar.");
+                    return;
+                }
+
+                const token = localStorage.getItem("access");
+                if (!token) {
+                    window.location.href = "/login/";
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append("content", content);
+                if (image) {
+                    formData.append("image", image);
+                }
+
+                fetch("/api/posts/create/", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                })
+                .then(res => {
+                    if (res.status === 401) {
+                        window.location.href = "/login/";
+                        return;
+                    }
+                    return res.json();
+                })
+                .then(newPost => {
+                    if (newPost) {
+                        // Insertar el nuevo post al inicio
+                        setPosts(prev => [newPost, ...prev]);
+                        setContent("");
+                        setImage(null);
+                    }
+                })
+                .catch(() => {
+                    setError("Ocurrió un error al publicar.");
+                });
+            }
+
+            if (loading) {
+                return <p>Cargando tus publicaciones...</p>;
+            }
+
+            return (
+                <div className="mb-4">
+                    {/* Formulario para crear post */}
+                    <div className="card mb-4 p-3 shadow-sm">
+                        {error && <div className="alert alert-danger">{error}</div>}
+
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-3">
+                                <label className="form-label">¿En qué estás pensando?</label>
+                                <textarea
+                                    className="form-control"
+                                    rows="3"
+                                    value={content}
+                                    onChange={e => setContent(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="mb-3">
+                                <label className="form-label">Imagen (opcional)</label>
+                                <input
+                                    type="file"
+                                    className="form-control"
+                                    onChange={handleImageChange}
+                                />
+                            </div>
+
+                            <button className="btn btn-primary w-100">
+                                Publicar
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Lista de posts */}
+                    {posts.length === 0 ? (
+                        <p className="text-muted">Aún no has publicado nada.</p>
+                    ) : (
+                        posts.map(post => (
+                            <div key={post.id} className="card mb-3 p-3 shadow-sm">
+                                <div className="d-flex justify-content-between">
+                                    <strong>@{post.author_username}</strong>
+                                    <small className="text-muted">
+                                        {new Date(post.created_at).toLocaleString()}
+                                    </small>
+                                </div>
+
+                                {post.content && (
+                                    <p className="mt-2 mb-1">
+                                        {post.content}
+                                    </p>
+                                )}
+
+                                {post.image && (
+                                    <img
+                                        src={post.image}
+                                        alt="post"
+                                        className="img-fluid rounded mt-2"
+                                    />
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<ProfileApp />, document.getElementById("profileApp"));
+        ReactDOM.render(<MyPostsApp />, document.getElementById("myPostsApp"));
+    </script>
+    {% endverbatim %}
+
+</body>
+</html>

@@ -1,0 +1,203 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Editar Perfil</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+
+<body class="container mt-5">
+
+    <h2 class="text-center mb-4">Editar Perfil</h2>
+
+    <div id="editApp"></div>
+
+    {% verbatim %}
+    <script type="text/babel">
+
+    function EditProfileApp() {
+
+        const [loading, setLoading] = React.useState(true);
+
+        const [firstName, setFirstName] = React.useState("");
+        const [lastName, setLastName] = React.useState("");
+
+        const [bio, setBio] = React.useState("");
+        const [birthdate, setBirthdate] = React.useState("");
+        const [isPrivate, setIsPrivate] = React.useState(false);
+
+        const [avatar, setAvatar] = React.useState(null);
+        const [preview, setPreview] = React.useState("");
+
+        const [msg, setMsg] = React.useState("");
+
+        React.useEffect(() => {
+            const token = localStorage.getItem("access");
+
+            fetch("/api/auth/me/", {
+                headers: { "Authorization": "Bearer " + token }
+            })
+            .then(res => res.json())
+            .then(data => {
+                setFirstName(data.first_name || "");
+                setLastName(data.last_name || "");
+
+                setBio(data.profile.bio || "");
+                setBirthdate(data.profile.birthdate || "");
+                setIsPrivate(data.profile.is_private);
+
+                setPreview(data.profile.avatar || "");
+                setLoading(false);
+            });
+        }, []);
+
+
+        function handleAvatar(e) {
+            const file = e.target.files[0];
+            setAvatar(file);
+            setPreview(URL.createObjectURL(file));
+        }
+
+        async function save(e) {
+            e.preventDefault();
+
+            let access = localStorage.getItem("access");
+
+            const formData = new FormData();
+            formData.append("first_name", firstName);
+            formData.append("last_name", lastName);
+            formData.append("bio", bio);
+            formData.append("birthdate", birthdate);
+            formData.append("is_private", isPrivate);
+            if (avatar) formData.append("avatar", avatar);
+
+            // 1) Intento inicial
+            let res = await fetch("/api/auth/profile/update/", {
+                method: "PUT",
+                headers: { "Authorization": "Bearer " + access },
+                body: formData
+            });
+
+            // 2) Si access expiró → intentamos refresh
+            if (res.status === 401) {
+
+                const refresh = localStorage.getItem("refresh");
+
+                const refreshRes = await fetch("/api/auth/refresh/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ refresh })
+                });
+
+                if (refreshRes.status !== 200) {
+                    // Refresh inválido → Login de nuevo
+                    window.location.href = "/login/";
+                    return;
+                }
+
+                const dataRefresh = await refreshRes.json();
+                access = dataRefresh.access;
+                localStorage.setItem("access", access);
+
+                // 3) Reintentar update con el nuevo access token
+                res = await fetch("/api/auth/profile/update/", {
+                    method: "PUT",
+                    headers: { "Authorization": "Bearer " + access },
+                    body: formData
+                });
+            }
+
+            const data = await res.json();
+            if (data.updated) {
+                setMsg("Perfil actualizado correctamente");
+            }
+        }
+
+
+        if (loading) return <p>Cargando...</p>;
+
+        return (
+            <div className="card p-4 shadow-sm" style={{ maxWidth: "450px", margin: "auto" }}>
+
+                {msg && <div className="alert alert-success">{msg}</div>}
+
+                <form onSubmit={save}>
+
+                    <div className="text-center mb-3">
+                        <img 
+                            src={preview || "https://via.placeholder.com/150"}
+                            width="120" height="120"
+                            className="rounded-circle"
+                        />
+                    </div>
+
+                    <label className="form-label">Cambiar foto:</label>
+                    <input type="file" className="form-control mb-3" onChange={handleAvatar} />
+
+                    <label>Primer nombre</label>
+                    <input 
+                        className="form-control mb-3"
+                        value={firstName} 
+                        onChange={e => setFirstName(e.target.value)} 
+                    />
+
+                    <label>Apellido</label>
+                    <input 
+                        className="form-control mb-3"
+                        value={lastName} 
+                        onChange={e => setLastName(e.target.value)} 
+                    />
+
+                    <label>Bio</label>
+                    <textarea 
+                        className="form-control mb-3"
+                        maxLength="300"
+                        value={bio}
+                        onChange={e => setBio(e.target.value)}
+                    />
+
+                    <label>Fecha de nacimiento</label>
+                    <input 
+                        type="date"
+                        className="form-control mb-3"
+                        value={birthdate}
+                        onChange={e => setBirthdate(e.target.value)}
+                    />
+
+                    <div className="form-check mb-3">
+                        <input 
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={isPrivate}
+                            onChange={e => setIsPrivate(e.target.checked)}
+                        />
+                        <label className="form-check-label">Perfil privado</label>
+                    </div>
+
+                    <button className="btn btn-primary w-100">Guardar Cambios</button>
+
+                    <button
+                        type="button"
+                        onClick={() => window.location.href = "/profile/"}
+                        className="btn btn-secondary w-100 mt-2">
+                        Volver
+                    </button>
+
+                </form>
+            </div>
+        );
+    }
+
+    ReactDOM.render(<EditProfileApp />, document.getElementById("editApp"));
+
+    </script>
+    {% endverbatim %}
+    
+</body>
+</html>

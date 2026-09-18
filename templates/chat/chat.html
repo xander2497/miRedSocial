@@ -1,0 +1,327 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <style>
+        .chat-container {
+            display: flex;
+            height: 80vh;
+        }
+
+        .sidebar {
+            width: 30%;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+
+        .chat-window {
+            width: 70%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+        }
+
+        .me {
+            background: #cfe8ff;
+            margin-left: auto;
+        }
+
+        .other {
+            background: #eee;
+        }
+    </style>
+</head>
+
+<body class="container mt-4">
+
+    <h2 class="text-center mb-4">Chat</h2>
+
+    <div id="chatApp"></div>
+
+{% verbatim %}
+<script type="text/babel">
+
+function ChatApp() {
+
+    const [conversations, setConversations] = React.useState([]);
+    const [selectedConv, setSelectedConv] = React.useState(null);
+    const [view, setView] = React.useState("chats"); // chats | users
+    const [users, setUsers] = React.useState([]);
+    const [me, setMe] = React.useState(null);
+
+    React.useEffect(() => {
+        loadMe();
+        loadConversations();
+    }, []);
+
+    async function loadMe() {
+        const token = localStorage.getItem("access");
+        const res = await fetch("/api/auth/me/", {
+            headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        setMe(data);
+    }
+
+    async function loadConversations() {
+        const token = localStorage.getItem("access");
+
+        const res = await fetch("/api/chat/conversations/", {
+            headers: { "Authorization": "Bearer " + token }
+        });
+
+        if (res.status === 401) {
+            window.location.href = "/login/";
+            return;
+        }
+
+        const data = await res.json();
+        setConversations(data);
+    }
+
+    // CARGAR LISTA DE USUARIOS PARA INICIAR CHAT
+    async function loadUsers() {
+        const token = localStorage.getItem("access");
+        const res = await fetch("/api/auth/users/", {
+            headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        setUsers(data);
+    }
+
+    // INICIAR UNA CONVERSACIÓN
+    async function startConversation(user_id) {
+        const token = localStorage.getItem("access");
+
+        const res = await fetch(`/api/chat/start/${user_id}/`, {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + token }
+        });
+
+        const conv = await res.json();
+
+        setSelectedConv(conv);
+        setView("chats");
+        loadConversations();
+    }
+
+    return (
+        <div className="chat-container card shadow p-3">
+
+            <div className="d-flex justify-content-end mb-3">
+                <button 
+                    className="btn btn-outline-secondary"
+                    onClick={() => window.location.href = "/profile/"}>
+                    ← Volver al perfil
+                </button>
+            </div>
+
+
+            {/* SIDEBAR */}
+            <div className="sidebar p-3">
+
+                <div className="d-flex mb-3 gap-2">
+                    <button 
+                        className={"btn " + (view === "chats" ? "btn-primary" : "btn-outline-primary")}
+                        onClick={() => setView("chats")}
+                    >
+                        Conversaciones
+                    </button>
+
+                    <button 
+                        className={"btn " + (view === "users" ? "btn-secondary" : "btn-outline-secondary")}
+                        onClick={() => {
+                            loadUsers();
+                            setView("users");
+                        }}
+                    >
+                        Usuarios
+                    </button>
+                </div>
+
+                {view === "chats" && (
+                    <ConversationList 
+                        conversations={conversations}
+                        openConversation={setSelectedConv}
+                    />
+                )}
+
+                {view === "users" && (
+                    <UserList 
+                        users={users}
+                        startConversation={startConversation}
+                    />
+                )}
+
+            </div>
+
+            {/* CHAT WINDOW */}
+            <div className="chat-window p-3">
+                {!selectedConv ? (
+                    <p className="text-muted mt-4 text-center">Selecciona una conversación</p>
+                ) : (
+                    <ChatWindow conversation={selectedConv} me={me} />
+                )}
+            </div>
+
+        </div>
+    );
+}
+
+
+// =========== COMPONENTES ========== //
+
+function ConversationList({ conversations, openConversation }) {
+    return (
+        <div>
+            <h5>Mis chats</h5>
+
+            {conversations.length === 0 && (
+                <p className="text-muted">No tienes conversaciones.</p>
+            )}
+
+            {conversations.map(conv => (
+                <div
+                    key={conv.id}
+                    className="p-2 mb-2 border rounded"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => openConversation(conv)}
+                >
+                    <strong>@{conv.partner.username}</strong>
+                    <br />
+                    <small className="text-muted">{conv.last_message_preview || "—"}</small>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function UserList({ users, startConversation }) {
+    return (
+        <div>
+            <h5>Usuarios</h5>
+
+            {users.map(u => (
+                <div key={u.id} className="d-flex justify-content-between align-items-center mb-2">
+                    <span>@{u.username}</span>
+                    <button 
+                        className="btn btn-sm btn-primary"
+                        onClick={() => startConversation(u.id)}
+                    >
+                        Iniciar chat
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ChatWindow({ conversation, me }) {
+
+    const [messages, setMessages] = React.useState([]);
+    const [input, setInput] = React.useState("");
+
+    React.useEffect(() => {
+        loadMessages();
+
+        const interval = setInterval(loadMessages, 1500);
+        return () => clearInterval(interval);
+
+    }, [conversation]);
+
+    async function loadMessages() {
+        const token = localStorage.getItem("access");
+
+        const res = await fetch(`/api/chat/${conversation.id}/messages/`, {
+            headers: { "Authorization": "Bearer " + token }
+        });
+
+        const data = await res.json();
+        setMessages(data);
+    }
+
+    async function sendMessage(e) {
+        e.preventDefault();
+        if (!input.trim()) return;
+
+        const token = localStorage.getItem("access");
+
+        await fetch(`/api/chat/${conversation.id}/send/`, {
+            method: "POST",
+            headers: { 
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ content: input })
+        });
+
+        setInput("");
+        loadMessages();
+    }
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+
+            <h5 className="mb-3">Chat con @{conversation.partner.username}</h5>
+
+            <div className="messages mb-3">
+                {messages.map(msg => (
+                    <div 
+                        key={msg.id}
+                        className={
+                            "message-bubble " + 
+                            (msg.author.id === me.id ? "me" : "other")
+                        }
+                    >
+                        {msg.content}
+                        <div className="text-muted" style={{ fontSize:"10px" }}>
+                            {new Date(msg.created_at).toLocaleString()}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <form onSubmit={sendMessage} className="d-flex gap-2">
+                <input 
+                    className="form-control"
+                    placeholder="Escribe un mensaje..."
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                />
+                <button className="btn btn-primary">Enviar</button>
+            </form>
+
+        </div>
+    );
+}
+
+ReactDOM.render(<ChatApp />, document.getElementById("chatApp"));
+
+</script>
+{% endverbatim %}
+
+</body>
+</html>
